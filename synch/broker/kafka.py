@@ -7,6 +7,7 @@ from kafka.admin import NewTopic
 
 from synch.broker import Broker
 from synch.common import JsonEncoder, object_hook
+from synch.redis import RedisOffsetPos
 from synch.settings import Settings
 
 logger = logging.getLogger("synch.brokers.kafka")
@@ -27,6 +28,7 @@ class KafkaBroker(Broker):
             key_serializer=lambda x: x.encode(),
         )
         self._init_topic()
+        self.offset_handler = RedisOffsetPos(alias)
 
     def close(self):
         self.producer and self.producer.close()
@@ -61,10 +63,12 @@ class KafkaBroker(Broker):
                 yield None, msgs
             else:
                 for msg in msgs.get(topic_partition):
+                    self._partition, self._offset = partition, msg.offset
                     yield msg.offset, msg.value
 
     def commit(self, schema: str = None):
         self.consumer.commit()
+        self.offset_handler.set_offset(self._partition, self._offset)
 
     def _init_topic(self):
         client = KafkaAdminClient(bootstrap_servers=self.servers)

@@ -44,14 +44,14 @@ class Redis:
 
 class RedisLogPos(Redis):
     def __init__(
-        self, alias: str,
+            self, alias: str,
     ):
         super().__init__()
         self.server_id = Settings.get_source_db(alias).get("server_id")
         self.pos_key = f"{self.prefix}:binlog:{alias}:{self.server_id}"
 
     def set_log_pos_master(
-        self, master_host, master_port, relay_master_log_file, exec_master_log_pos
+            self, master_host, master_port, relay_master_log_file, exec_master_log_pos
     ):
         self.master.hmset(
             self.pos_key,
@@ -79,3 +79,34 @@ class RedisLogPos(Redis):
         """
         log_position = self.slave.hgetall(self.pos_key)
         return log_position.get("log_file"), log_position.get("log_pos")
+
+
+class RedisOffsetPos(Redis):
+    def __init__(
+            self, alias: str,
+    ):
+        super().__init__()
+        self.offset_key = f"{self.prefix}:consume:{alias}:offset"
+
+    def set_offset(self, partition, offset):
+        """
+        set mq consumer offset
+        :param partition:
+        :param offset:
+        :return:
+        """
+        self.master.hmset(
+            self.offset_key,
+            {
+                "partition": partition,
+                "offset": offset,
+            },
+        )
+
+    def get_offset(self):
+        """
+        get mq consumer offset
+        :return:
+        """
+        offset_position = self.slave.hget(self.offset_key)
+        return offset_position.get("partition"), offset_position.get("offset")
