@@ -39,7 +39,7 @@ def finish_continuous_etl(broker):
 
 
 def continuous_etl(
-    alias: str, schema: str, tables_pk: Dict, tables_dict: Dict, last_msg_id, skip_error: bool,
+        alias: str, schema: str, tables_pk: Dict, tables_dict: Dict, last_msg_id, skip_error: bool,
 ):
     """
     continuous etl from broker and insert into clickhouse
@@ -79,7 +79,15 @@ def continuous_etl(
             len_event += 1
             event = msg
             table = event["table"]
-            schema = event["schema"]
+            schema_from_mq = event["schema"]
+            # exclude talbe not in config
+            if table not in tables_dict.keys():
+                logger.debug(f"table:{table} do not need to sync")
+                continue
+            if schema_from_mq != schema:
+                logger.debug(f"schema:{schema_from_mq} do not need to sync")
+                continue
+            schema = schema_from_mq
             action = event["action"]
             values = event["values"]
 

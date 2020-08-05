@@ -1,4 +1,5 @@
 import logging
+from copy import deepcopy
 from typing import Dict, List, Union
 
 from synch.enums import ClickHouseEngine
@@ -40,14 +41,14 @@ class ClickHouseMergeTree(ClickHouse):
         return sql
 
     def get_table_create_sql(
-        self,
-        reader: Reader,
-        schema: str,
-        table: str,
-        pk,
-        partition_by: str = None,
-        engine_settings: str = None,
-        **kwargs,
+            self,
+            reader: Reader,
+            schema: str,
+            table: str,
+            pk,
+            partition_by: str = None,
+            engine_settings: str = None,
+            **kwargs,
     ):
         partition_by_str = ""
         engine_settings_str = ""
@@ -62,17 +63,26 @@ class ClickHouseMergeTree(ClickHouse):
         return f"insert into {schema}.{table} {reader.get_source_select_sql(schema, table, )}"
 
     def handle_event(
-        self,
-        tables_dict: Dict,
-        pk,
-        schema: str,
-        table: str,
-        action: str,
-        tmp_event_list: Dict,
-        event: Dict,
+            self,
+            tables_dict: Dict,
+            pk,
+            schema: str,
+            table: str,
+            action: str,
+            tmp_event_list: Dict,
+            event: Dict,
     ):
         values = self.pre_handle_values(tables_dict.get(table).get("skip_decimal"), event["values"])
-        event["values"] = values
+        tmp_values = deepcopy(values)
+        # TODO 此处最好是读配置文件 ，可以设置一个为一个mapping 特性
+        #  目前只有一个小地方需要修改，因为生日有可能是1970年之前
+        #  但是 ClickHouse 不支持1970年之前的日期格式，需要转为字符串
+        #  以后如果有多个需要转str ，可改成一个mapping 特性，从配置文件读取
+        if table == 'tb_user_info':
+            v = values['BIRTH']
+            if v:
+                tmp_values['BIRTH'] = str(v)
+        event["values"] = tmp_values
         tmp_event_list.setdefault(table, {}).setdefault(action, {})
         if not pk:
             logger.warning(f"No pk found in table {schema}.{table}, skip...")
