@@ -86,27 +86,29 @@ class RedisOffsetPos(Redis):
             self, alias: str,
     ):
         super().__init__()
-        self.offset_key = f"{self.prefix}:consume:{alias}:offset"
+        self.offset_key = f"{self.prefix}:consume:{alias}"
 
-    def set_offset(self, partition, offset):
+    def set_offset(self, schema, partition, offset):
         """
         set mq consumer offset
         :param partition:
         :param offset:
         :return:
         """
+        offset_key = f"{self.offset_key}:{schema}"
         self.master.hmset(
-            self.offset_key,
+            offset_key,
             {
                 "partition": partition,
                 "offset": offset,
             },
         )
 
-    def get_offset(self):
+    def get_offset(self, schema):
         """
         get mq consumer offset
         :return:
         """
-        offset_position = self.slave.hget(self.offset_key)
+        offset_key = f"{self.offset_key}:{schema}"
+        offset_position = self.slave.hget(offset_key)
         return offset_position.get("partition"), offset_position.get("offset")

@@ -1,9 +1,10 @@
+import functools
 import json
 import logging
 
 import kafka.errors
 from kafka import KafkaAdminClient, KafkaConsumer, KafkaProducer, TopicPartition
-from kafka.admin import NewTopic
+from kafka.admin import NewTopic, NewPartitions
 
 from synch.broker import Broker
 from synch.common import JsonEncoder, object_hook
@@ -35,8 +36,11 @@ class KafkaBroker(Broker):
         self.consumer and self.consumer.close()
 
     def send(self, schema: str, msg: dict):
-        self.producer.send(self.topic, key=schema, value=msg)
+        partition = self._get_kafka_partition(schema)
+        logger.debug(f'Topic {self.topic} schema:{schema} partition is {partition}')
+        self.producer.send(self.topic, key=schema, partition=partition, value=msg)
 
+    @functools.lru_cache()
     def _get_kafka_partition(self, schema: str) -> int:
         for index, database in enumerate(self.databases):
             if database.get("database") == schema:
@@ -68,7 +72,7 @@ class KafkaBroker(Broker):
 
     def commit(self, schema: str = None):
         self.consumer.commit()
-        self.offset_handler.set_offset(self._partition, self._offset)
+        self.offset_handler.set_offset(schema, self._partition, self._offset)
 
     def _init_topic(self):
         client = KafkaAdminClient(bootstrap_servers=self.servers)
@@ -77,4 +81,8 @@ class KafkaBroker(Broker):
                 [NewTopic(self.topic, num_partitions=len(self.databases), replication_factor=1)]
             )
         except kafka.errors.TopicAlreadyExistsError:
+            pass
+        try:
+            client.create_partitions({self.topic: NewPartitions(len(self.databases))})
+        except kafka.errors.InvalidPartitionsError:
             pass
